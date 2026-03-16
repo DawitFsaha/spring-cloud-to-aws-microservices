@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Messaging layer starter (Amazon MSK cluster).
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: cs590-microservices
+  Environment:
+    Type: String
+    Default: demo
+  PrivateAppSubnetAId:
+    Type: AWS::EC2::Subnet::Id
+  PrivateAppSubnetBId:
+    Type: AWS::EC2::Subnet::Id
+  MskSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  KafkaVersion:
+    Type: String
+    Default: 3.6.0
+  NumberOfBrokerNodes:
+    Type: Number
+    Default: 2
+
+Resources:
+  MskConfiguration:
+    Type: AWS::MSK::Configuration
+    Properties:
+      Name: !Sub ${ProjectName}-${Environment}-msk-config
+      ServerProperties: |
+        auto.create.topics.enable=true
+        default.replication.factor=2
+        min.insync.replicas=1
+        num.partitions=3
+
+  MskCluster:
+    Type: AWS::MSK::Cluster
+    Properties:
+      ClusterName: !Sub ${ProjectName}-${Environment}-msk
+      KafkaVersion: !Ref KafkaVersion
+      NumberOfBrokerNodes: !Ref NumberOfBrokerNodes
+      BrokerNodeGroupInfo:
+        ClientSubnets:
+          - !Ref PrivateAppSubnetAId
+          - !Ref PrivateAppSubnetBId
+        InstanceType: kafka.t3.small
+        SecurityGroups:
+          - !Ref MskSecurityGroupId
+      ConfigurationInfo:
+        Arn: !Ref MskConfiguration
+        Revision: !GetAtt MskConfiguration.LatestRevision.Revision
+      EncryptionInfo:
+        EncryptionInTransit:
+          ClientBroker: TLS_PLAINTEXT
+          InCluster: true
+      ClientAuthentication:
+        Sasl:
+          Iam:
+            Enabled: true
+
+Outputs:
+  MskClusterArn:
+    Value: !Ref MskCluster
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-MskClusterArn
+  BootstrapBrokers:
+    Value: !GetAtt MskCluster.BootstrapBrokers
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-MskBootstrapBrokers
+  BootstrapBrokersTls:
+    Value: !GetAtt MskCluster.BootstrapBrokersTls
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-MskBootstrapBrokersTls
+  BootstrapBrokersSaslIam:
+    Value: !GetAtt MskCluster.BootstrapBrokersSaslIam
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-MskBootstrapBrokersSaslIam

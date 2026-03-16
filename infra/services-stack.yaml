@@ -1,0 +1,351 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: ECS task definitions + ECS services for project microservices.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: cs590-microservices
+  Environment:
+    Type: String
+    Default: demo
+  EcsClusterArn:
+    Type: String
+  TaskExecutionRoleArn:
+    Type: String
+  TaskRoleArn:
+    Type: String
+  NamespaceId:
+    Type: String
+  NamespaceName:
+    Type: String
+    Default: demo.local
+  PrivateAppSubnetAId:
+    Type: AWS::EC2::Subnet::Id
+  PrivateAppSubnetBId:
+    Type: AWS::EC2::Subnet::Id
+  EcsServiceSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  ProductMongoUriSecretArn:
+    Type: String
+  StockMongoUriSecretArn:
+    Type: String
+  OrderMongoUriSecretArn:
+    Type: String
+  KafkaBootstrapBrokers:
+    Type: String
+  ApiGatewayImageUri:
+    Type: String
+    Default: REPLACE_ME_API_GATEWAY_IMAGE
+  ProductServiceImageUri:
+    Type: String
+    Default: REPLACE_ME_PRODUCT_SERVICE_IMAGE
+  StockServiceImageUri:
+    Type: String
+    Default: REPLACE_ME_STOCK_SERVICE_IMAGE
+  OrderServiceImageUri:
+    Type: String
+    Default: REPLACE_ME_ORDER_SERVICE_IMAGE
+  DeployApiGatewayService:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+
+Conditions:
+  ShouldDeployApiGateway: !Equals [!Ref DeployApiGatewayService, "true"]
+
+Resources:
+  ProductDiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: product-service
+      NamespaceId: !Ref NamespaceId
+      DnsConfig:
+        DnsRecords:
+          - Type: A
+            TTL: 10
+        RoutingPolicy: MULTIVALUE
+
+  StockDiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: stock-service
+      NamespaceId: !Ref NamespaceId
+      DnsConfig:
+        DnsRecords:
+          - Type: A
+            TTL: 10
+        RoutingPolicy: MULTIVALUE
+
+  OrderDiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: order-service
+      NamespaceId: !Ref NamespaceId
+      DnsConfig:
+        DnsRecords:
+          - Type: A
+            TTL: 10
+        RoutingPolicy: MULTIVALUE
+
+  ApiGatewayDiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Condition: ShouldDeployApiGateway
+    Properties:
+      Name: api-gateway
+      NamespaceId: !Ref NamespaceId
+      DnsConfig:
+        DnsRecords:
+          - Type: A
+            TTL: 10
+        RoutingPolicy: MULTIVALUE
+
+  ProductTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub ${ProjectName}-${Environment}-product-service
+      Cpu: "512"
+      Memory: "1024"
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !Ref TaskExecutionRoleArn
+      TaskRoleArn: !Ref TaskRoleArn
+      ContainerDefinitions:
+        - Name: product-service
+          Image: !Ref ProductServiceImageUri
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8901
+          Environment:
+            - Name: SPRING_APPLICATION_NAME
+              Value: product-service
+            - Name: SPRING_PROFILES_ACTIVE
+              Value: aws
+            - Name: APP_ENV
+              Value: !Ref Environment
+            - Name: STOCK_SERVICE_BASE_URL
+              Value: !Sub http://stock-service.${NamespaceName}:8900
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+          Secrets:
+            - Name: SPRING_DATA_MONGODB_URI
+              ValueFrom: !Ref ProductMongoUriSecretArn
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub /ecs/${ProjectName}/${Environment}/product-service
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  StockTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub ${ProjectName}-${Environment}-stock-service
+      Cpu: "512"
+      Memory: "1024"
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !Ref TaskExecutionRoleArn
+      TaskRoleArn: !Ref TaskRoleArn
+      ContainerDefinitions:
+        - Name: stock-service
+          Image: !Ref StockServiceImageUri
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8900
+          Environment:
+            - Name: SPRING_APPLICATION_NAME
+              Value: stock-service
+            - Name: SPRING_PROFILES_ACTIVE
+              Value: aws
+            - Name: APP_ENV
+              Value: !Ref Environment
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              Value: !Ref KafkaBootstrapBrokers
+          Secrets:
+            - Name: SPRING_DATA_MONGODB_URI
+              ValueFrom: !Ref StockMongoUriSecretArn
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub /ecs/${ProjectName}/${Environment}/stock-service
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  OrderTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub ${ProjectName}-${Environment}-order-service
+      Cpu: "512"
+      Memory: "1024"
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !Ref TaskExecutionRoleArn
+      TaskRoleArn: !Ref TaskRoleArn
+      ContainerDefinitions:
+        - Name: order-service
+          Image: !Ref OrderServiceImageUri
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8903
+          Environment:
+            - Name: SPRING_APPLICATION_NAME
+              Value: order-service
+            - Name: SPRING_PROFILES_ACTIVE
+              Value: aws
+            - Name: APP_ENV
+              Value: !Ref Environment
+            - Name: PRODUCT_SERVICE_BASE_URL
+              Value: !Sub http://product-service.${NamespaceName}:8901
+            - Name: STOCK_SERVICE_BASE_URL
+              Value: !Sub http://stock-service.${NamespaceName}:8900
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              Value: !Ref KafkaBootstrapBrokers
+          Secrets:
+            - Name: SPRING_DATA_MONGODB_URI
+              ValueFrom: !Ref OrderMongoUriSecretArn
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub /ecs/${ProjectName}/${Environment}/order-service
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  ApiGatewayTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Condition: ShouldDeployApiGateway
+    Properties:
+      Family: !Sub ${ProjectName}-${Environment}-api-gateway
+      Cpu: "512"
+      Memory: "1024"
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !Ref TaskExecutionRoleArn
+      TaskRoleArn: !Ref TaskRoleArn
+      ContainerDefinitions:
+        - Name: api-gateway
+          Image: !Ref ApiGatewayImageUri
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8080
+          Environment:
+            - Name: SPRING_APPLICATION_NAME
+              Value: api-gateway
+            - Name: SPRING_PROFILES_ACTIVE
+              Value: aws
+            - Name: APP_ENV
+              Value: !Ref Environment
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub /ecs/${ProjectName}/${Environment}/api-gateway
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  ProductService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref EcsClusterArn
+      ServiceName: product-service
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref ProductTaskDefinition
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateAppSubnetAId
+            - !Ref PrivateAppSubnetBId
+          SecurityGroups:
+            - !Ref EcsServiceSecurityGroupId
+      ServiceRegistries:
+        - RegistryArn: !GetAtt ProductDiscoveryService.Arn
+
+  StockService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref EcsClusterArn
+      ServiceName: stock-service
+      LaunchType: FARGATE
+      DesiredCount: 2
+      TaskDefinition: !Ref StockTaskDefinition
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateAppSubnetAId
+            - !Ref PrivateAppSubnetBId
+          SecurityGroups:
+            - !Ref EcsServiceSecurityGroupId
+      ServiceRegistries:
+        - RegistryArn: !GetAtt StockDiscoveryService.Arn
+
+  OrderService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref EcsClusterArn
+      ServiceName: order-service
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref OrderTaskDefinition
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateAppSubnetAId
+            - !Ref PrivateAppSubnetBId
+          SecurityGroups:
+            - !Ref EcsServiceSecurityGroupId
+      ServiceRegistries:
+        - RegistryArn: !GetAtt OrderDiscoveryService.Arn
+
+  ApiGatewayService:
+    Type: AWS::ECS::Service
+    Condition: ShouldDeployApiGateway
+    Properties:
+      Cluster: !Ref EcsClusterArn
+      ServiceName: api-gateway
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref ApiGatewayTaskDefinition
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateAppSubnetAId
+            - !Ref PrivateAppSubnetBId
+          SecurityGroups:
+            - !Ref EcsServiceSecurityGroupId
+      ServiceRegistries:
+        - RegistryArn: !GetAtt ApiGatewayDiscoveryService.Arn
+
+Outputs:
+  ProductDiscoveryServiceArn:
+    Value: !GetAtt ProductDiscoveryService.Arn
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-ProductDiscoveryServiceArn
+  StockDiscoveryServiceArn:
+    Value: !GetAtt StockDiscoveryService.Arn
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-StockDiscoveryServiceArn
+  OrderDiscoveryServiceArn:
+    Value: !GetAtt OrderDiscoveryService.Arn
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-OrderDiscoveryServiceArn

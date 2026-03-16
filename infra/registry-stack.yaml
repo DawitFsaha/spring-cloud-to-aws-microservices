@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Service registry foundation with Cloud Map private namespace.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: cs590-microservices
+  Environment:
+    Type: String
+    Default: demo
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  NamespaceName:
+    Type: String
+    Default: demo.local
+
+Resources:
+  PrivateDnsNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: !Ref NamespaceName
+      Vpc: !Ref VpcId
+      Description: !Sub Cloud Map namespace for ${ProjectName}-${Environment}
+
+Outputs:
+  NamespaceId:
+    Value: !Ref PrivateDnsNamespace
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-CloudMapNamespaceId
+  NamespaceArn:
+    Value: !GetAtt PrivateDnsNamespace.Arn
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-CloudMapNamespaceArn
+  NamespaceName:
+    Value: !Ref NamespaceName
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-CloudMapNamespaceName

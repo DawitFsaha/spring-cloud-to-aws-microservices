@@ -1,0 +1,143 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Observability resources (CloudWatch logs/alarms/dashboard and X-Ray sampling).
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: cs590-microservices
+  Environment:
+    Type: String
+    Default: demo
+  AlarmEmail:
+    Type: String
+    Default: ""
+
+Conditions:
+  HasAlarmEmail: !Not [!Equals [!Ref AlarmEmail, ""]]
+
+Resources:
+  ApiGatewayLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/${ProjectName}/${Environment}/api-gateway
+      RetentionInDays: 14
+
+  ProductServiceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/${ProjectName}/${Environment}/product-service
+      RetentionInDays: 14
+
+  StockServiceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/${ProjectName}/${Environment}/stock-service
+      RetentionInDays: 14
+
+  OrderServiceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/${ProjectName}/${Environment}/order-service
+      RetentionInDays: 14
+
+  ErrorMetricFilterOrderService:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref OrderServiceLogGroup
+      FilterPattern: "ERROR"
+      MetricTransformations:
+        - MetricValue: "1"
+          MetricNamespace: !Sub ${ProjectName}/${Environment}
+          MetricName: order-service-error-count
+
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasAlarmEmail
+    Properties:
+      TopicName: !Sub ${ProjectName}-${Environment}-alarms
+
+  AlarmSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlarmEmail
+    Properties:
+      TopicArn: !Ref AlarmTopic
+      Protocol: email
+      Endpoint: !Ref AlarmEmail
+
+  OrderServiceErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${ProjectName}-${Environment}-order-service-errors
+      AlarmDescription: Alarm when order-service emits ERROR logs.
+      Namespace: !Sub ${ProjectName}/${Environment}
+      MetricName: order-service-error-count
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - HasAlarmEmail
+        - [!Ref AlarmTopic]
+        - []
+
+  ServiceDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub ${ProjectName}-${Environment}-microservices
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  ["${ProjectName}/${Environment}", "order-service-error-count"]
+                ],
+                "period": 60,
+                "stat": "Sum",
+                "region": "${AWS::Region}",
+                "title": "Order Service ERROR count"
+              }
+            }
+          ]
+        }
+
+  DefaultSamplingRule:
+    Type: AWS::XRay::SamplingRule
+    Properties:
+      SamplingRule:
+        RuleName: !Sub ${ProjectName}-${Environment}-default-sampling
+        Priority: 1000
+        Version: 1
+        ReservoirSize: 1
+        FixedRate: 0.2
+        Host: "*"
+        HTTPMethod: "*"
+        URLPath: "*"
+        ResourceARN: "*"
+        ServiceName: "*"
+        ServiceType: "*"
+
+Outputs:
+  ApiGatewayLogGroupName:
+    Value: !Ref ApiGatewayLogGroup
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-ApiGatewayLogGroupName
+  ProductServiceLogGroupName:
+    Value: !Ref ProductServiceLogGroup
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-ProductServiceLogGroupName
+  StockServiceLogGroupName:
+    Value: !Ref StockServiceLogGroup
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-StockServiceLogGroupName
+  OrderServiceLogGroupName:
+    Value: !Ref OrderServiceLogGroup
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-OrderServiceLogGroupName

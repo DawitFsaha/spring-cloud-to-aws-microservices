@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Base compute resources (ECS cluster, IAM roles, ECR repositories).
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: cs590-microservices
+  Environment:
+    Type: String
+    Default: demo
+
+Resources:
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub ${ProjectName}-${Environment}-cluster
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-${Environment}-ecs-task-execution-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-${Environment}-ecs-task-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${ProjectName}-${Environment}-ecs-task-inline-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadParameterStore
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: "*"
+              - Sid: ReadSecrets
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: "*"
+              - Sid: TracingWrite
+                Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                Resource: "*"
+              - Sid: LogsWrite
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  ApiGatewayEcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${ProjectName}/${Environment}/api-gateway
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  ProductServiceEcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${ProjectName}/${Environment}/product-service
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  StockServiceEcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${ProjectName}/${Environment}/stock-service
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  OrderServiceEcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${ProjectName}/${Environment}/order-service
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+Outputs:
+  EcsClusterArn:
+    Value: !GetAtt EcsCluster.Arn
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-EcsClusterArn
+  EcsClusterName:
+    Value: !Ref EcsCluster
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-EcsClusterName
+  TaskExecutionRoleArn:
+    Value: !GetAtt TaskExecutionRole.Arn
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-TaskExecutionRoleArn
+  TaskRoleArn:
+    Value: !GetAtt TaskRole.Arn
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-TaskRoleArn
+  ApiGatewayEcrRepositoryUri:
+    Value: !GetAtt ApiGatewayEcrRepository.RepositoryUri
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-ApiGatewayEcrRepositoryUri
+  ProductServiceEcrRepositoryUri:
+    Value: !GetAtt ProductServiceEcrRepository.RepositoryUri
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-ProductServiceEcrRepositoryUri
+  StockServiceEcrRepositoryUri:
+    Value: !GetAtt StockServiceEcrRepository.RepositoryUri
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-StockServiceEcrRepositoryUri
+  OrderServiceEcrRepositoryUri:
+    Value: !GetAtt OrderServiceEcrRepository.RepositoryUri
+    Export:
+      Name: !Sub ${ProjectName}-${Environment}-OrderServiceEcrRepositoryUri
