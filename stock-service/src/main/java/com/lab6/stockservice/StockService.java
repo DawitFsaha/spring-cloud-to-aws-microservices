@@ -1,6 +1,7 @@
 package com.lab6.stockservice;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -14,14 +15,16 @@ public class StockService {
         this.stockRepository = stockRepository;
     }
 
+    @Transactional(readOnly = true)
     public Integer getAvailableStock(int productNumber) {
-        return stockRepository.findByProductNumber(productNumber)
+        return stockRepository.findFirstByProductNumberOrderByIdDesc(productNumber)
                 .map(stock -> stock.getQuantity() - totalReserved(stock))
                 .orElse(null);
     }
 
+    @Transactional
     public Stock reserve(int productNumber, String orderId, int quantity) {
-        Stock stock = stockRepository.findByProductNumber(productNumber).orElse(null);
+        Stock stock = stockRepository.findFirstByProductNumberOrderByIdDesc(productNumber).orElse(null);
         if (stock == null) {
             return null;
         }
@@ -49,8 +52,9 @@ public class StockService {
         return stockRepository.save(stock);
     }
 
+    @Transactional
     public Stock releaseReservation(int productNumber, String orderId) {
-        Stock stock = stockRepository.findByProductNumber(productNumber).orElse(null);
+        Stock stock = stockRepository.findFirstByProductNumberOrderByIdDesc(productNumber).orElse(null);
         if (stock == null) {
             return null;
         }
@@ -62,8 +66,9 @@ public class StockService {
         return stockRepository.save(stock);
     }
 
+    @Transactional
     public Stock confirmReservation(int productNumber, String orderId) {
-        Stock stock = stockRepository.findByProductNumber(productNumber).orElse(null);
+        Stock stock = stockRepository.findFirstByProductNumberOrderByIdDesc(productNumber).orElse(null);
         if (stock == null) {
             return null;
         }
@@ -82,8 +87,9 @@ public class StockService {
         return stockRepository.save(stock);
     }
 
+    @Transactional
     public Stock restock(int productNumber, int quantity) {
-        Stock stock = stockRepository.findByProductNumber(productNumber).orElse(null);
+        Stock stock = stockRepository.findFirstByProductNumberOrderByIdDesc(productNumber).orElse(null);
         if (stock == null) {
             return null;
         }

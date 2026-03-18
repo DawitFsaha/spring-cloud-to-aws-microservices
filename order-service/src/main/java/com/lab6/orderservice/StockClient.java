@@ -5,7 +5,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
-@FeignClient(name = "stock-service")
+@FeignClient(name = "stock-service", url = "${STOCK_SERVICE_BASE_URL:http://stock-service.demo.local:8900}")
 public interface StockClient {
 
     @PostMapping("/stock/{productNumber}/reserve")

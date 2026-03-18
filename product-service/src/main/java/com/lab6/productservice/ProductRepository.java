@@ -1,9 +1,9 @@
 package com.lab6.productservice;
 
-import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
-public interface ProductRepository extends MongoRepository<Product, String> {
-    Optional<Product> findByProductNumber(int productNumber);
+public interface ProductRepository extends JpaRepository<Product, Long> {
+    Optional<Product> findFirstByProductNumberOrderByIdDesc(int productNumber);
 }

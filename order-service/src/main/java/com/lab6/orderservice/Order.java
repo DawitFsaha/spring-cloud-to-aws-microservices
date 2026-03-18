@@ -1,12 +1,16 @@
 package com.lab6.orderservice;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
-@Document(collection = "orders")
+@Entity
+@Table(name = "orders")
 public class Order {
 
     @Id
+    @Column(nullable = false, length = 64)
     private String id;
     private int productNumber;
     private int quantity;

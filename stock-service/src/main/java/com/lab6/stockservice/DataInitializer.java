@@ -24,7 +24,7 @@ public class DataInitializer implements CommandLineRunner {
                     new Stock(4, 35),
                     new Stock(5, 200)
             ));
-            System.out.println("Stock data seeded into MongoDB (stock_db).");
+            System.out.println("Stock data seeded into PostgreSQL (app_db).");
         }
     }
 }

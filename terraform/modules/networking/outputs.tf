@@ -1,0 +1,10 @@
+output "vpc_id" { value = aws_vpc.this.id }
+output "private_app_subnet_a_id" { value = aws_subnet.private_app_a.id }
+output "private_app_subnet_b_id" { value = aws_subnet.private_app_b.id }
+output "private_data_subnet_a_id" { value = aws_subnet.private_data_a.id }
+output "private_data_subnet_b_id" { value = aws_subnet.private_data_b.id }
+output "alb_security_group_id" { value = aws_security_group.alb.id }
+output "vpc_link_security_group_id" { value = aws_security_group.vpc_link.id }
+output "ecs_service_security_group_id" { value = aws_security_group.ecs_service.id }
+output "db_security_group_id" { value = aws_security_group.db.id }
+output "msk_security_group_id" { value = aws_security_group.msk.id }

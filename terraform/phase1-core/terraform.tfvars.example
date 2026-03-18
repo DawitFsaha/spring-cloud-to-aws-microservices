@@ -1,0 +1,20 @@
+aws_region   = "us-east-2"
+project_name = "cs590-microservices"
+environment  = "demo"
+
+# First apply (core infra only): keep false
+deploy_services = false
+
+# Second apply (after Kafka bootstrap value is updated): set true and provide images
+# deploy_services           = true
+# product_service_image_uri = "221342428586.dkr.ecr.us-east-2.amazonaws.com/cs590-microservices/demo/product-service:latest"
+# stock_service_image_uri   = "221342428586.dkr.ecr.us-east-2.amazonaws.com/cs590-microservices/demo/stock-service:latest"
+# order_service_image_uri   = "221342428586.dkr.ecr.us-east-2.amazonaws.com/cs590-microservices/demo/order-service:latest"
+
+# Optional Spring API gateway service (recommended false)
+deploy_api_gateway_service = false
+api_gateway_image_uri      = ""
+
+# Kafka is managed manually; set this after creating your cluster
+create_kafka_bootstrap_parameter = true
+kafka_bootstrap_brokers_value    = "b-1.example.kafka.us-east-2.amazonaws.com:9092,b-2.example.kafka.us-east-2.amazonaws.com:9092"

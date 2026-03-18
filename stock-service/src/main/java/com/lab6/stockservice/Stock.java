@@ -1,18 +1,35 @@
 package com.lab6.stockservice;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.MapKeyColumn;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.util.HashMap;
 import java.util.Map;
 
-@Document(collection = "stocks")
+@Entity
+@Table(name = "stocks", uniqueConstraints = @UniqueConstraint(columnNames = "productNumber"))
 public class Stock {
 
     @Id
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
     private int productNumber;
     private int quantity;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "stock_reservations", joinColumns = @JoinColumn(name = "stock_id"))
+    @MapKeyColumn(name = "order_id")
+    @Column(name = "reserved_quantity")
     private Map<String, Integer> reservations = new HashMap<>();
 
     public Stock() {}
@@ -22,11 +39,11 @@ public class Stock {
         this.quantity = quantity;
     }
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 

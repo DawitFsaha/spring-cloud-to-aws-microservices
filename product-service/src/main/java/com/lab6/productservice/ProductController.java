@@ -19,7 +19,7 @@ public class ProductController {
 
     @GetMapping("/{productNumber}")
     public ResponseEntity<Product> getProduct(@PathVariable int productNumber) {
-        return productRepository.findByProductNumber(productNumber)
+        return productRepository.findFirstByProductNumberOrderByIdDesc(productNumber)
                 .map(product -> {
                     int stock = stockClient.getStock(productNumber);
                     product.setNumberOnStock(stock);
@@ -44,7 +44,7 @@ public class ProductController {
     @PutMapping("/{productNumber}")
     public ResponseEntity<Product> updateProduct(@PathVariable int productNumber,
                                                  @RequestBody Product updated) {
-        return productRepository.findByProductNumber(productNumber)
+        return productRepository.findFirstByProductNumberOrderByIdDesc(productNumber)
                 .map(product -> {
                     product.setName(updated.getName());
                     return ResponseEntity.ok(productRepository.save(product));
@@ -54,7 +54,7 @@ public class ProductController {
 
     @DeleteMapping("/{productNumber}")
     public ResponseEntity<Void> deleteProduct(@PathVariable int productNumber) {
-        return productRepository.findByProductNumber(productNumber)
+        return productRepository.findFirstByProductNumberOrderByIdDesc(productNumber)
                 .map(product -> {
                     productRepository.delete(product);
                     return ResponseEntity.noContent().<Void>build();

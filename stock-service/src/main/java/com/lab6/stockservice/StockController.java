@@ -42,7 +42,7 @@ public class StockController {
     @PutMapping("/{productNumber}")
     public ResponseEntity<Stock> updateStock(@PathVariable int productNumber,
                                              @RequestParam int quantity) {
-        return stockRepository.findByProductNumber(productNumber)
+        return stockRepository.findFirstByProductNumberOrderByIdDesc(productNumber)
                 .map(stock -> {
                     stock.setQuantity(quantity);
                     return ResponseEntity.ok(stockRepository.save(stock));
@@ -97,7 +97,7 @@ public class StockController {
 
     @DeleteMapping("/{productNumber}")
     public ResponseEntity<Void> deleteStock(@PathVariable int productNumber) {
-        return stockRepository.findByProductNumber(productNumber)
+        return stockRepository.findFirstByProductNumberOrderByIdDesc(productNumber)
                 .map(stock -> {
                     stockRepository.delete(stock);
                     return ResponseEntity.noContent().<Void>build();

@@ -24,7 +24,7 @@ public class DataInitializer implements CommandLineRunner {
                     new Product(4, "Monitor"),
                     new Product(5, "Keyboard")
             ));
-            System.out.println("Product data seeded into MongoDB (product_db).");
+            System.out.println("Product data seeded into PostgreSQL (app_db).");
         }
     }
 }

@@ -3,6 +3,7 @@ package com.lab6.orderservice;
 import feign.FeignException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -13,8 +14,11 @@ import java.util.UUID;
 @RequestMapping("/order")
 public class OrderController {
 
-    private static final String ORDER_CREATED_TOPIC = "order-created";
-    private static final String ORDER_CANCELLED_TOPIC = "order-cancelled";
+    @Value("${ORDER_CREATED_TOPIC:order-created}")
+    private String orderCreatedTopic;
+
+    @Value("${ORDER_CANCELLED_TOPIC:order-cancelled}")
+    private String orderCancelledTopic;
 
     private final OrderRepository orderRepository;
     private final KafkaTemplate<String, OrderEvent> kafkaTemplate;
@@ -86,7 +90,7 @@ public class OrderController {
                 saved.getQuantity(),
                 Instant.now()
         );
-        kafkaTemplate.send(ORDER_CREATED_TOPIC, saved.getId(), event);
+        kafkaTemplate.send(orderCreatedTopic, saved.getId(), event);
 
         OrderCreatedResponse response = new OrderCreatedResponse(
             saved.getId(),
@@ -128,7 +132,7 @@ public class OrderController {
                     existing.getQuantity(),
                     Instant.now()
             );
-            kafkaTemplate.send(ORDER_CANCELLED_TOPIC, existing.getId(), event);
+            kafkaTemplate.send(orderCancelledTopic, existing.getId(), event);
         }
 
         ProductResponse product;
