@@ -67,12 +67,51 @@ flowchart TB
 
 ## Request Flow (Implemented)
 
-1. Client sends request to API Gateway endpoint.
-2. API Gateway forwards through VPC Link to the internal ALB.
-3. ALB routes by path to the correct ECS service (`/order/*`, `/product/*`, `/stock/*`).
-4. `order-service` performs synchronous validation calls to `product-service` and `stock-service`.
-5. `order-service` publishes Kafka events to MSK (`order-created`, `order-cancelled`).
-6. `stock-service` consumes events and updates stock state.
+### A) Startup and service-discovery wiring (before any request)
+
+1. Terraform creates Cloud Map private DNS namespace and service entries (`product-service`, `stock-service`, `order-service`) with `MULTIVALUE` routing.
+2. Terraform stores base URLs in SSM Parameter Store, including `stock-service` URL as `http://stock-service.<namespace>:8900`.
+3. ECS starts an `order-service` task.
+4. During ECS task initialization (before Spring Boot starts), ECS resolves secrets/parameters and injects `STOCK_SERVICE_BASE_URL` (and other config) into container environment variables.
+5. Spring Boot starts in `order-service`, and the Feign client is configured with `@FeignClient(... url = ${STOCK_SERVICE_BASE_URL...})`.
+6. At this point, `order-service` has the stock hostname, but no stock IP is pinned yet; DNS resolution happens when a call is made.
+
+### B) Detailed `POST /order` flow
+
+1. Client sends `POST /order` to API Gateway HTTP API.
+2. API Gateway forwards through VPC Link to the internal ALB listener.
+3. ALB path rule for `/order` forwards to the `order-service` target group.
+4. `order-service` receives request, validates payload (`quantity > 0`), and generates `orderId`.
+5. `order-service` calls `OrderIntegrationService.reserveStock(...)`.
+6. Resilience4j `Retry`/`CircuitBreaker` (`stockService`) wraps this method.
+7. Feign builds request URL from `STOCK_SERVICE_BASE_URL`, e.g. `http://stock-service.<namespace>:8900/stock/{productNumber}/reserve?...`.
+8. On this outbound call, the JVM resolver queries DNS for `stock-service.<namespace>` (Cloud Map name).
+9. Cloud Map returns one or more healthy task IPs (MULTIVALUE policy, TTL-based DNS records).
+10. HTTP call is sent to one selected stock task IP on port `8900`.
+11. `stock-service` processes `/reserve`:
+
+- success: returns updated stock,
+- missing product: `404`,
+- insufficient stock: `409`.
+
+12. `order-service` maps reserve result:
+
+- `404` -> returns `404`,
+- `409` -> returns `409`,
+- circuit/fallback/infra failure -> returns `503`.
+
+13. If reserve succeeds, `order-service` calls `product-service` to enrich order response data.
+14. If product lookup fails after reserve, `order-service` compensates by calling stock `release-reservation`.
+15. If product lookup succeeds, `order-service` persists order in Aurora (`status=CREATED`).
+16. `order-service` publishes `ORDER_CREATED` event to MSK topic (`order-created`).
+17. `order-service` returns success payload to client.
+
+### C) Where Cloud Map balancing actually happens
+
+1. Balancing for `order-service -> stock-service` is DNS/client-side (Cloud Map), not ALB-based.
+2. Each stock ECS task registers/deregisters in Cloud Map via ECS service registry.
+3. As task health/status changes, the set of DNS answers changes.
+4. New outbound calls from `order-service` can resolve to different stock task IPs over time (subject to DNS cache/TTL behavior).
 
 ---
 
@@ -166,26 +205,55 @@ At minimum ensure task role permits:
 
 ---
 
-## Quick Troubleshooting
+## Fast Circuit Breaker Demo (Order -> Stock, ~3 requests)
 
-### `POST /order` times out
+This project is configured so `order-service` opens the `stockService` circuit breaker after **3 failed calls**.
 
-- Check order-service logs for Kafka metadata/topic errors.
-- Confirm MSK bootstrap brokers in SSM parameter are correct.
-- Confirm task role includes `CreateTopic` and `WriteData`.
-- Confirm security group path from ECS to MSK broker port `9098` is allowed.
+### 1) Deploy updated `order-service`
 
-### ECS rollout does not pick latest image
+Build/push and force a new deployment (same commands as above).
 
-- Re-run image build/push with `:latest`.
-- Force new deployment using `aws ecs update-service --force-new-deployment`.
-- Confirm active task is newly started and image digest updated.
+### 2) Open CloudWatch logs for `order-service`
+
+Watch for fallback lines from `OrderIntegrationService`, e.g.:
+
+- `Circuit breaker fallback triggered for stock-service reserve ...`
+
+Optional Logs Insights query (replace log group if needed):
+
+```sql
+fields @timestamp, @message
+| filter @message like /Circuit breaker fallback triggered for stock-service/
+  or @message like /CallNotPermittedException/
+| sort @timestamp desc
+| limit 100
+```
+
+### 3) Simulate stock outage (both ECS instances)
+
+Temporarily scale `stock-service` desired count from `2` to `0` (or otherwise make both tasks unreachable).
+
+### 4) Send only 3 create-order requests
+
+Use your API Gateway endpoint and send 3 quick `POST /order` calls, for example:
+
+```bash
+API_BASE="https://<your-api-id>.execute-api.us-east-2.amazonaws.com"
+
+for i in 1 2 3; do
+  curl -s -o /dev/null -w "request-$i status=%{http_code} time=%{time_total}s\n" \
+    -X POST "$API_BASE/order" \
+    -H "Content-Type: application/json" \
+    -d '{"productNumber":1,"quantity":1}'
+done
+```
+
+Expected: responses become `503`, and fallback logs appear in `order-service` CloudWatch logs.
+
+### 5) Show recovery quickly
+
+Scale `stock-service` back to `2`, wait ~10 seconds (open-state wait duration), then send one more `POST /order`.
+
+Expected: request succeeds again (assuming product/stock data is valid), demonstrating breaker recovery.
 
 ---
-
-## Related Docs
-
-- `README.md`
-- `AWS_CLOUD_ARCHITECTURE_GUIDE.md`
-- `AWS_HANDS_ON_IMPLEMENTATION_CHECKLIST.md`
-- `terraform/README.md`
